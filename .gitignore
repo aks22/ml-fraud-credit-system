@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables — NEVER commit your actual .env
+.env
+
+# Data — raw data should be downloaded locally, not committed
+data/raw/
+data/processed/
+data/external/
+
+# Model outputs — can be regenerated; large binary files
+outputs/models/
+outputs/*.png
+outputs/*.txt
+mlruns/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+outputs/app.log
+
+# Docker volumes (if accidentally created locally)
+postgres_data/
+.env
+data/raw/
+data/processed/
+outputs/models/
+fraud_credit_system/
+*.pkl
+outputs/
