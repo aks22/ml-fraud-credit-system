@@ -57,6 +57,16 @@ FRAUD_NUMERIC_FEATURES = [
 
 FRAUD_CATEGORICAL_FEATURES = ["type"]
 
+# CONTRACT: fraud model must always produce exactly 14 features.
+# 9 numeric + 5 OHE columns (one per TransactionType).
+# This constant is shared with fraud-streaming-pipeline — do NOT change
+# without updating both projects.
+FRAUD_FEATURE_COUNT = 14
+
+# Explicit category list for OneHotEncoder — locks the 5 OHE columns
+# regardless of which types happen to appear in training data.
+FRAUD_TYPE_CATEGORIES = [["CASH_IN", "CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER"]]
+
 FRAUD_TARGET = "is_fraud"
 
 
@@ -117,10 +127,29 @@ def build_fraud_pipeline() -> ImbPipeline:
     The ImbPipeline from imbalanced-learn is used so that SMOTE
     is correctly integrated and only applied during fit(), not transform().
 
+    Output width is locked to FRAUD_FEATURE_COUNT (14):
+      9 numeric features + 5 OHE columns for TransactionType.
+
     Returns:
         ImbPipeline: preprocessor → SMOTE (ready to be fit on training data)
     """
-    preprocessor = _build_preprocessor(FRAUD_NUMERIC_FEATURES, FRAUD_CATEGORICAL_FEATURES)
+    # Use explicit categories so OHE always produces exactly 5 columns for
+    # 'type', even if some types are absent from a particular training split.
+    categorical_transformer = Pipeline(steps=[
+        ("onehot", OneHotEncoder(
+            categories=FRAUD_TYPE_CATEGORIES,
+            handle_unknown="ignore",
+            sparse_output=False,
+        )),
+    ])
+    numeric_transformer = Pipeline(steps=[("scaler", StandardScaler())])
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_transformer, FRAUD_NUMERIC_FEATURES),
+            ("cat", categorical_transformer, FRAUD_CATEGORICAL_FEATURES),
+        ],
+        remainder="drop",
+    )
 
     pipeline = ImbPipeline(steps=[
         ("preprocessor", preprocessor),
@@ -197,9 +226,17 @@ def prepare_fraud_data(
     # fit_resample = fit preprocessor + apply SMOTE on training data
     X_train_res, y_train_res = pipeline.fit_resample(X_train, y_train)
 
+    # Enforce the 14-feature contract shared with fraud-streaming-pipeline
+    actual = X_train_res.shape[1]
+    if actual != FRAUD_FEATURE_COUNT:
+        raise RuntimeError(
+            f"Fraud feature count mismatch: expected {FRAUD_FEATURE_COUNT}, got {actual}. "
+            "Update FRAUD_FEATURE_COUNT and fraud-streaming-pipeline together."
+        )
+
     logger.info(
         f"After SMOTE — Train samples: {len(X_train_res):,} | "
-        f"Fraud rate: {y_train_res.mean():.4%}"
+        f"Fraud rate: {y_train_res.mean():.4%} | Features: {actual}"
     )
 
     # Transform test data using the fitted preprocessor (no SMOTE on test data)

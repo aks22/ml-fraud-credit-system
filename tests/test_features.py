@@ -113,9 +113,11 @@ def test_no_data_leakage_test_set(small_fraud_df, tmp_path, monkeypatch):
 def test_credit_pipeline_multiclass(small_credit_df, tmp_path, monkeypatch):
     """Credit pipeline should produce 3-class labels (0, 1, 2)."""
     import config.settings as s
+    credit_pipeline_path = tmp_path / "credit_pipeline.pkl"
     monkeypatch.setattr(s, "MODELS_DIR", tmp_path)
     monkeypatch.setattr(s, "PROCESSED_DATA_DIR", tmp_path)
-    monkeypatch.setattr(s, "CREDIT_PIPELINE_PATH", tmp_path / "credit_pipeline.pkl")
+    monkeypatch.setattr(s, "CREDIT_PIPELINE_PATH", credit_pipeline_path)
+    monkeypatch.setattr("src.features.pipeline.CREDIT_PIPELINE_PATH", credit_pipeline_path)
 
     from src.features.pipeline import prepare_credit_data
     X_train, X_test, y_train, y_test, _ = prepare_credit_data(small_credit_df)

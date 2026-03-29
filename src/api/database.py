@@ -22,7 +22,7 @@ Usage:
 
 from datetime import datetime
 from sqlalchemy import (
-    create_engine, Column, Integer, Float, String, Boolean, DateTime, Text
+    create_engine, Column, Integer, Float, String, Boolean, DateTime
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
@@ -30,16 +30,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from config.settings import DATABASE_URL
 from src.utils.logger import logger
 
-# SQLAlchemy engine and session factory
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,        # Test connection before using from pool
-    pool_size=10,              # Number of persistent connections
-    max_overflow=20,           # Extra connections allowed beyond pool_size
-    echo=False,                # Set True to log all SQL queries (debug only)
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
@@ -92,17 +82,74 @@ class CreditPredictionLog(Base):
     model_version = Column(String(50))
 
 
+def _build_engine():
+    """
+    Build SQLAlchemy engine. Uses PostgreSQL if available, otherwise falls back
+    to SQLite (for testing / environments without PostgreSQL).
+    """
+    db_url = DATABASE_URL
+    is_postgres = db_url.startswith("postgresql")
+
+    try:
+        if is_postgres:
+            eng = create_engine(
+                db_url,
+                pool_pre_ping=True,
+                pool_size=10,
+                max_overflow=20,
+                echo=False,
+            )
+        else:
+            eng = create_engine(db_url, echo=False)
+        return eng
+    except Exception as e:
+        logger.warning(
+            f"Could not create database engine with '{db_url}': {e}. "
+            "Falling back to in-memory SQLite — prediction logging will not persist."
+        )
+        return create_engine("sqlite:///:memory:", echo=False)
+
+
+# Lazy engine: built on first access so import does not fail when psycopg2 is absent.
+_engine = None
+_SessionLocal = None
+
+
+def _get_engine():
+    global _engine
+    if _engine is None:
+        _engine = _build_engine()
+    return _engine
+
+
+def _get_session_local():
+    global _SessionLocal
+    if _SessionLocal is None:
+        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_get_engine())
+    return _SessionLocal
+
+
+# Convenience alias: engine is the lazy-loaded engine instance
+def get_engine():
+    """Return the SQLAlchemy engine, building it lazily on first call."""
+    return _get_engine()
+
+SessionLocal = None  # Kept for backwards compat; use _get_session_local() internally
+
+
 def create_tables() -> None:
     """
     Create all database tables if they don't exist.
     Safe to call multiple times (CREATE TABLE IF NOT EXISTS semantics).
     """
     try:
-        Base.metadata.create_all(bind=engine)
+        Base.metadata.create_all(bind=_get_engine())
         logger.info("Database tables created/verified successfully")
     except SQLAlchemyError as e:
         logger.error(f"Database table creation failed: {e}")
         logger.warning("Prediction logging will be disabled. Check DATABASE_URL in .env")
+    except Exception as e:
+        logger.warning(f"Database unavailable: {e}. Prediction logging disabled.")
 
 
 def get_db():
@@ -115,7 +162,8 @@ def get_db():
         async def predict(db: Session = Depends(get_db)):
             ...
     """
-    db = SessionLocal()
+    SessionFactory = _get_session_local()
+    db = SessionFactory()
     try:
         yield db
     finally:

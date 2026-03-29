@@ -13,7 +13,7 @@ Endpoints:
 All routes log predictions to PostgreSQL and expose metrics to Prometheus.
 """
 
-from datetime import datetime
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -162,7 +162,6 @@ async def fraud_prediction(
 
     try:
         response = predict_fraud(request, model_store)
-        import uuid
         _log_fraud_prediction(request, response, str(uuid.uuid4()), db)
         return response
     except Exception as e:
@@ -197,7 +196,6 @@ async def credit_risk_prediction(
 
     try:
         response = predict_credit_risk(request, model_store)
-        import uuid
         _log_credit_prediction(request, response, str(uuid.uuid4()), db)
         return response
     except Exception as e:

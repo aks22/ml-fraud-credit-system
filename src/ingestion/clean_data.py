@@ -18,6 +18,9 @@ Usage:
 """
 
 import re
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import pandas as pd
 import numpy as np
 from config.settings import PROCESSED_DATA_DIR
@@ -218,6 +221,46 @@ def clean_credit_data(df: pd.DataFrame) -> pd.DataFrame:
 
     # 5. Cap outliers
     df = _cap_outliers(df, ["credit_amount", "age", "duration_months"])
+
+    # 6. Map German credit codes to human-readable labels (for API compatibility)
+    _CHECKING_MAP = {
+        "A11": "< 0 DM", "A12": "0-200 DM", "A13": ">= 200 DM", "A14": "no_account"
+    }
+    _CREDIT_HISTORY_MAP = {
+        "A30": "no_credits", "A31": "all_paid", "A32": "existing_paid",
+        "A33": "delay", "A34": "critical"
+    }
+    _PURPOSE_MAP = {
+        "A40": "car", "A41": "car", "A42": "furniture", "A43": "radio/TV",
+        "A44": "domestic", "A45": "repairs", "A46": "education",
+        "A48": "retraining", "A49": "business", "A410": "vacation"
+    }
+    _SAVINGS_MAP = {
+        "A61": "< 100 DM", "A62": "100-500 DM", "A63": "500-1000 DM",
+        "A64": ">= 1000 DM", "A65": "no_savings"
+    }
+    _EMPLOYMENT_MAP = {
+        "A71": "unemployed", "A72": "< 1 year", "A73": "1-4 years",
+        "A74": "4-7 years", "A75": ">= 7 years"
+    }
+    _HOUSING_MAP = {"A151": "rent", "A152": "own", "A153": "free"}
+    _JOB_MAP = {
+        "A171": "unemployed", "A172": "unskilled", "A173": "skilled",
+        "A174": "highly_skilled"
+    }
+
+    code_maps = {
+        "checking_account": _CHECKING_MAP,
+        "credit_history": _CREDIT_HISTORY_MAP,
+        "purpose": _PURPOSE_MAP,
+        "savings": _SAVINGS_MAP,
+        "employment": _EMPLOYMENT_MAP,
+        "housing": _HOUSING_MAP,
+        "job": _JOB_MAP,
+    }
+    for col, mapping in code_maps.items():
+        if col in df.columns:
+            df[col] = df[col].map(mapping).fillna(df[col])
 
     logger.info(f"Credit cleaning complete — {len(df):,} rows (removed {original_len - len(df):,})")
     return df

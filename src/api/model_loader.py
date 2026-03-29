@@ -22,7 +22,7 @@ Usage:
 import joblib
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from config.settings import (
     FRAUD_PIPELINE_PATH,
@@ -51,7 +51,11 @@ class ModelStore:
     credit_model_version: str = field(default="unknown", init=False)
 
     def load_all(self) -> None:
-        """Load all models. Called once at application startup."""
+        """Load all models. Called once at application startup.
+        If models are already loaded (e.g. injected in tests), this is a no-op."""
+        if self.fully_ready:
+            logger.debug("Models already loaded — skipping load_all()")
+            return
         self._load_fraud_assets()
         self._load_credit_assets()
 
